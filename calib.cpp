@@ -1,7 +1,6 @@
 #include <iostream>
 #include <vector>
 #include <string>
-#include <glob.h>
 #include <omp.h>
 
 #include <opencv2/opencv.hpp>
