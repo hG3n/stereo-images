@@ -1,31 +1,32 @@
 #include <iostream>
 #include <vector>
 #include <string>
+#include <glob.h>
 #include <omp.h>
 
 #include <opencv2/opencv.hpp>
 #include <opencv2/highgui/highgui.hpp>
 
-std::vector<cv::Mat> loadImages(std::string folder, int number, std::vector<cv::Mat> store) {
+void loadImages(std::string folder, int number, std::vector<cv::Mat> *store) {
   for(int i = 1; i < number+1; ++i){
     std::string num = std::to_string(i);
     cv::Mat img;
     if(i < 10) 
-      img = cv::imread(folder+"left00"+num+".jpg");
+      img = cv::imread(folder+"00"+num+".jpg");
     else
-      img = cv::imread(folder+"left0"+num+".jpg");
-    store.push_back(img);
+      img = cv::imread(folder+"0"+num+".jpg");
+    store->push_back(img);
     img.release();
   }
-  return store;
 }
 
-void saveCoefficients(cv::Mat matrix,
+void saveCoefficients(std::string filename,
+                      cv::Mat matrix,
                       cv::Mat distCoeffs,
                       std::vector<cv::Mat> rvecs,
                       std::vector<cv::Mat> tvecs) {
 
-  cv::FileStorage fs("coefficiant.xml", cv::FileStorage::WRITE);
+  cv::FileStorage fs(filename, cv::FileStorage::WRITE);
   fs << "cameraMatrix" << matrix;
   fs << "distCoeff" << distCoeffs;
   fs << "rvecs" << rvecs;
@@ -35,7 +36,6 @@ void saveCoefficients(cv::Mat matrix,
 
 int main() {
 
-  double start = omp_get_wtime();
   // settings
   int hCorners = 9;
   int vCorners = 6;
@@ -63,12 +63,12 @@ int main() {
   std::vector<cv::Point3f> obj;
 
   // load images from the specified destination to the vector
-  colorImages = loadImages("./img/", 13, colorImages);
+  loadImages("./img/", 19, &colorImages);
 
   for(int i = 0; i < numSquares; ++i)
     obj.push_back(cv::Point3f(i/hCorners, i%hCorners, 0.0f));
 
-  #pragma omp parallel for
+  //#pragma omp parallel for
   for(unsigned int i = 0; i < colorImages.size(); ++i) {
     cv::Mat grayImage;
     cv::cvtColor(colorImages[i], grayImage, CV_BGR2GRAY);
@@ -77,7 +77,7 @@ int main() {
 
     if(found) {
       cv::cornerSubPix(grayImage, corners, cv::Size(11,11), cv::Size(-1,-1), cv::TermCriteria(CV_TERMCRIT_EPS | CV_TERMCRIT_ITER, 30, 0.1));
-//      drawChessboardCorners(grayImage, boardSize, corners, found);
+      //drawChessboardCorners(grayImage, boardSize, corners, found);
     }
 
     imagePoints.push_back(corners);
@@ -90,6 +90,8 @@ int main() {
   }
 
   // undistort the images
+  
+  double start = omp_get_wtime();
   for(unsigned int i = 0; i < colorImages.size(); ++i) {
     cv::Mat undistorted;
     std::string imageNumber = std::to_string(i);
@@ -101,8 +103,9 @@ int main() {
     cv::imwrite("./out/"+ imageNumber + ".jpg", undistorted);
     undistorted.release();
   }
+  double end = omp_get_wtime();
 
-  saveCoefficients(intrinsic, distCoeffs, rvecs, tvecs);
+  saveCoefficients("coefficients.yml", intrinsic, distCoeffs, rvecs, tvecs);
 
 #if 0
   for(unsigned int i = 0; i < colorImages.size(); ++i) {
@@ -111,7 +114,6 @@ int main() {
   }
 #endif
 
-  double end = omp_get_wtime();
   std::cout << end - start << std::endl;
 
   return 0;
